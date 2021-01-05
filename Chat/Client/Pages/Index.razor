@@ -1,0 +1,175 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.SignalR.Client
+@using Chat.Shared
+@using System.Linq;
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+
+<EditForm Model="@_currentMessage" OnValidSubmit="@Send">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label>
+            User:
+            <InputText id="userUser" @bind-Value="_currentMessage.User" />
+        </label>
+    </div>
+    <div class="form-group">
+        <label>
+            Text:
+            <InputText id="message" @onkeypress="SendWritingNotification" @bind-Value="_currentMessage.Text" />
+            @*You cannot do @bind-value and @onchange because bi-directional binding subscribe to the onchange event.*@
+        </label>
+    </div>
+
+    <button class="btn-primary" disabled="@(!IsConnected)" type="submit">Send</button> @*da sie na podstawie disabled jakos fajnie kolorowac button?*@
+</EditForm>
+<br />
+<button @onclick="ChangeConnectionState">@(IsConnected ? "Disconnect" : "Connect")</button>
+
+
+<hr>
+
+<table>
+    <tr>
+        <th>Message</th>
+        <th>User</th>
+        <th>Time</th>
+        <th>X</th>
+    </tr>
+    @foreach (Message message in messages) //todo edycja
+    {
+        <tr bgcolor="@(message.User == _currentMessage.User ? "lightblue" : "" )">
+            @*tu zrobić jakies klasy a nie na pale kolor + dorobic porzadne klasy z formatowaniem itp*@
+            <td>@message.Text</td>
+            <td>@message.User</td>
+            <td>@message.TimeStamp</td>
+            @if (message.User == _currentMessage.User)
+            {
+                <td><button @onclick="_ => Remove(message.Id)">X</button></td>
+            }
+        </tr>
+    }
+</table>
+@*zrobic z tego komponent?*@
+@if (_typingUserNames.Any())
+{
+    <p class="writing">@(TypingMessage) is typing<span>.</span><span>.</span><span>.</span></p>
+
+}
+
+@code {
+    private HubConnection hubConnection = default!;
+    private List<Message> messages = new();
+
+    private Message _currentMessage = new();
+
+    private string TypingMessage
+        => $"{string.Join(", ", _typingUserNames)} {(_typingUserNames.Count() == 1 ? " is " : " are ")} typing";
+
+    private List<string> _typingUserNames = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        //load messages from somewhere... redis? SQL? File? Ofc via chathub
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+
+        hubConnection.On<Message>
+            ("ReceiveMessage", (message) =>
+            {
+                messages.Add(message);
+                StateHasChanged();
+            });
+
+        hubConnection.On<Guid>
+            ("DeleteMessage", (messageId) =>
+            {
+                if (messages.Exists(x => x.Id == messageId))
+                {
+                    messages = messages.Where(x => x.Id != messageId).ToList();
+                //todo mozna pokolorowac na czerowono i zrobic jakis fade out
+                StateHasChanged();
+                }
+
+
+            });
+
+        hubConnection.On<string>
+            ("UserIsWriting", (userName) =>
+            {
+                if (userName != _currentMessage.User)
+                {
+                    ReceiveWritingNotification(userName);
+                }
+
+
+            });
+
+        await hubConnection.StartAsync();
+    }
+
+    async void Send()
+    {
+        _currentMessage.TimeStamp = DateTime.Now;
+        _currentMessage.Id = Guid.NewGuid();
+        await hubConnection.SendAsync("SendMessage", _currentMessage);
+
+        _currentMessage.Text = "";
+    }
+
+    async void Remove(Guid messageId)
+    {
+        await hubConnection.SendAsync("DeleteMessage", messageId);
+
+        //to do metody?
+        messages = messages.Where(x => x.Id != messageId).ToList();
+        StateHasChanged();
+    }
+
+
+    public bool IsConnected
+    => hubConnection.State == HubConnectionState.Connected;
+
+
+    public Task ChangeConnectionState()
+    {
+        if (IsConnected)
+        {
+            return hubConnection.StopAsync();
+        }
+        else
+        {
+            return hubConnection.StartAsync();
+        }
+    }
+
+    //todo nie wysylac zawsze skorzystac z jakichs argumentow!
+    public Task SendWritingNotification()
+        => hubConnection.SendAsync("UserWriting", _currentMessage.User);
+
+    public async void ReceiveWritingNotification(string userName)
+    {
+        if (!_typingUserNames.Contains(userName))
+        {
+            _typingUserNames.Add(userName);
+            StateHasChanged();
+
+
+            await Task.Delay(1000);
+
+            _typingUserNames.Remove(userName);
+            StateHasChanged();
+
+        }
+
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await hubConnection.DisposeAsync();
+    }
+}
