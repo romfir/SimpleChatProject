@@ -4,6 +4,9 @@ using Microsoft.Extensions.Caching.Memory;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace Chat.Server.Hubs
@@ -17,8 +20,6 @@ namespace Chat.Server.Hubs
         public ChatHub(IMemoryCache cache)
             => _cache = cache;
 
-        //todo mozna dodac jakas zabawe z datami
-        //todo nie powinnismy w sumie uzywac all tylko Other, ale co jak jest zalgoowany na dwoch kompach? ALl zostaje
         public async Task SendMessage(Message message)
         {
             await Clients.All.SendAsync("ReceiveMessage", message).ConfigureAwait(false);
@@ -33,7 +34,6 @@ namespace Chat.Server.Hubs
             }
         }
 
-        //todo usuniecie tez z bazy jakbysmy jakas mieli
         //todo 2 walidacja usera ofc jakby jakas byla
         public async Task DeleteMessage(Guid messageId)
         {
@@ -54,6 +54,37 @@ namespace Chat.Server.Hubs
                 await Clients.Caller.SendAsync("MessageListLoad", messages).ConfigureAwait(false);
             }
         }
+
+        public ChannelReader<Message> RequestMessagesNew(CancellationToken cancellationToken)
+        {
+            var channel = Channel.CreateUnbounded<Message>();
+            _ = RequestMessagesNewInternal(channel.Writer, cancellationToken);
+            return channel.Reader;
+        }
+
+        private async Task RequestMessagesNewInternal(ChannelWriter<Message> writer, CancellationToken cancellationToken)
+        {
+            if (_cache.TryGetValue(_cacheListName, out IEnumerable<Message> messages))
+            {
+                foreach (Message message in messages)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await writer.WriteAsync(message, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        //private async IAsyncEnumerable<Message> RequestMessagesNewInternal([EnumeratorCancellation] CancellationToken cancellationToken)
+        //{
+        //    if (_cache.TryGetValue(_cacheListName, out IEnumerable<Message> messages))
+        //    {
+        //        foreach (Message message in messages)
+        //        {
+        //            cancellationToken.ThrowIfCancellationRequested();
+        //            yield return message;
+        //        }
+        //    }
+        //}
 
         public override Task OnConnectedAsync() => base.OnConnectedAsync();
 

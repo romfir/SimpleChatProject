@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.SignalR.Client
 @using Chat.Shared
 @using System.Linq;
+@using System.Threading
 @inject NavigationManager NavigationManager
 @implements IAsyncDisposable
 
@@ -46,25 +47,39 @@
             <div class="form-group small-margin " style="display: inline-block">
                 <label style="color:white" class="roundBorder">
                     User:
-                    <InputText id="userUser" @bind-Value="_currentMessage.User" class="roundBorder" />
+                    <InputText id="userUser" @bind-Value="_currentMessage.User" class="roundBorder" tabindex="1" />
                 </label>
             </div>
 
 
-            <button class="btn-primary roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block;">
+            <button class="btn-primary roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block;" tabindex="3">
                 <span class="oi oi-arrow-circle-right" aria-hidden="true"></span>
             </button>
-            <button @onclick="ChangeConnectionState" class="roundBorder small-margin" style="display: inline-block">
-                @(IsConnected ? "Disconnect" : "Reconnect")
-            </button>
+
 
             <br />
+
             <div class="form-group small-margin " style="display: inline-block">
                 <label style="color:white">
                     Text:
-                    <InputText id="message" @onkeypress="SendWritingNotification" @bind-Value="_currentMessage.Text" class="roundBorder" />
+                    <InputText id="message" @onkeypress="SendWritingNotification" @bind-Value="_currentMessage.Text" class="roundBorder" tabindex="2" />
                 </label>
             </div>
+
+            <button @onclick="ChangeConnectionState" class="roundBorder small-margin" style="display: inline-block" disabled="@(IsConnecting)" tabindex="4">
+                @if (IsConnecting)
+                {
+                    <div>Connecting</div>
+                }
+                else if (IsConnected)
+                {
+                    <div>Disconnect</div>
+                }
+                else
+                {
+                    <div>Reconnect</div>
+                }
+            </button>
 
         </EditForm>
     </footer>
@@ -83,7 +98,7 @@
     private Message _currentMessage = new();
 
     private string TypingMessage
-        => $"{string.Join(", ", _typingUserNames)} {(_typingUserNames.Count() == 1 ? " is " : " are ")} typing";
+            => $"{string.Join(", ", _typingUserNames)} {(_typingUserNames.Count() == 1 ? " is " : " are ")} typing";
 
     private List<string> _typingUserNames = new();
 
@@ -106,8 +121,8 @@
                 if (_messages.Exists(x => x.Id == messageId))
                 {
                     _messages = _messages.Where(x => x.Id != messageId).ToList();
-                //todo mozna pokolorowac na czerowono i zrobic jakis fade out
-                StateHasChanged();
+                    //todo mozna pokolorowac na czerowono i zrobic jakis fade out
+                    StateHasChanged();
                 }
             });
 
@@ -120,12 +135,12 @@
                 }
             });
 
-        _hubConnection.On<IEnumerable<Message>>
-            ("MessageListLoad", (messages) =>
-            {
-                _messages = messages.ToList();
-                StateHasChanged();
-            });
+        //_hubConnection.On<IEnumerable<Message>>
+        //    ("MessageListLoad", (messages) =>
+        //    {
+        //        _messages = messages.ToList();
+        //        StateHasChanged();
+        //    });
 
         await StartAndRequestMessagesAsync();
     }
@@ -133,8 +148,29 @@
     async Task StartAndRequestMessagesAsync()
     {
         await _hubConnection.StartAsync();
+        StateHasChanged();
 
-        await _hubConnection.SendAsync("RequestMessages");
+        // await _hubConnection.SendAsync("RequestMessages");
+
+        var cancellationTokenSource = new CancellationTokenSource();
+
+        //todo da sie to jakos streamowac? W przyszlosci chce ladowac fotki ktore beda wazyc wiecej
+
+        var stream = _hubConnection.StreamAsync<Message>("RequestMessagesNew", cancellationTokenSource.Token);
+        //while (await channel.WaitToReadAsync())
+        //{
+        //    while (channel.TryRead(out var message))
+        //    {
+        //        _messages.Add(message);
+        //        StateHasChanged();
+        //    }
+        //}
+        _messages = new();
+        await foreach (Message message in stream)
+        {
+            _messages.Add(message);
+            StateHasChanged();
+        }
     }
 
     async void Send()
@@ -156,7 +192,10 @@
 
 
     public bool IsConnected
-        => _hubConnection.State == HubConnectionState.Connected;
+            => _hubConnection.State == HubConnectionState.Connected;
+
+    public bool IsConnecting
+            => _hubConnection.State == HubConnectionState.Connecting || _hubConnection is null;
 
 
     public Task ChangeConnectionState()
@@ -195,5 +234,5 @@
     }
 
     public async ValueTask DisposeAsync()
-        => await _hubConnection.DisposeAsync();
+            => await _hubConnection.DisposeAsync();
 }
