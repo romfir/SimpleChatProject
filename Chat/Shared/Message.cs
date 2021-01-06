@@ -18,10 +18,10 @@ namespace Chat.Shared
         public Guid Id { get; set; }
 
         [Required, MaxLength(50)]
-        public string User { get; set; }
+        public string User { get; set; } = null!;
 
         [Required, MaxLength(50), MinLength(1)]
-        public string Text { get; set; }
+        public string Text { get; set; } = null!;
 
         public DateTime TimeStamp { get; set; }
     }

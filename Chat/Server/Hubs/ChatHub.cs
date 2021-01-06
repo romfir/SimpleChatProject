@@ -68,6 +68,6 @@ namespace Chat.Server.Hubs
 
         public override Task OnConnectedAsync() => base.OnConnectedAsync();
 
-        public override Task OnDisconnectedAsync(Exception exception) => base.OnDisconnectedAsync(exception);
+        public override Task OnDisconnectedAsync(Exception? exception) => base.OnDisconnectedAsync(exception);
     }
 }
