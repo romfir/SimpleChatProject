@@ -49,6 +49,16 @@
                     <InputText id="userUser" @bind-Value="_currentMessage.User" class="roundBorder" />
                 </label>
             </div>
+
+
+            <button class="btn-primary roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block;">
+                <span class="oi oi-arrow-circle-right" aria-hidden="true"></span>
+            </button>
+            <button @onclick="ChangeConnectionState" class="roundBorder small-margin" style="display: inline-block">
+                @(IsConnected ? "Disconnect" : "Reconnect")
+            </button>
+
+            <br />
             <div class="form-group small-margin " style="display: inline-block">
                 <label style="color:white">
                     Text:
@@ -56,11 +66,7 @@
                 </label>
             </div>
 
-            <button class="btn-primary roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block;">
-                <span class="oi oi-arrow-circle-right" aria-hidden="true"></span>
-            </button>
         </EditForm>
-        <button @onclick="ChangeConnectionState" class="roundBorder small-margin" style="display: inline-block">@(IsConnected ? "Disconnect" : "Connect")</button>
     </footer>
 </div>
 
@@ -83,7 +89,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        //load messages from somewhere... redis? SQL? File? Ofc via chathub
         _hubConnection = new HubConnectionBuilder()
         .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
         .Build();
@@ -104,8 +109,6 @@
                 //todo mozna pokolorowac na czerowono i zrobic jakis fade out
                 StateHasChanged();
                 }
-
-
             });
 
         _hubConnection.On<string>
@@ -115,8 +118,6 @@
                 {
                     ReceiveWritingNotification(userName);
                 }
-
-
             });
 
         _hubConnection.On<IEnumerable<Message>>
@@ -124,7 +125,6 @@
             {
                 _messages = messages.ToList();
                 StateHasChanged();
-
             });
 
         await StartAndRequestMessagesAsync();
@@ -156,7 +156,7 @@
 
 
     public bool IsConnected
-    => _hubConnection.State == HubConnectionState.Connected;
+        => _hubConnection.State == HubConnectionState.Connected;
 
 
     public Task ChangeConnectionState()
@@ -191,13 +191,9 @@
 
             _typingUserNames.Remove(userName);
             StateHasChanged();
-
         }
-
     }
 
     public async ValueTask DisposeAsync()
-    {
-        await _hubConnection.DisposeAsync();
-    }
+        => await _hubConnection.DisposeAsync();
 }
