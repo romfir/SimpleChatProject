@@ -68,7 +68,7 @@
             <div class="form-group small-margin " style="display: inline-block">
             </div>
 
-            <button @onclick="ChangeConnectionState" class="roundBorder small-margin" style="display: inline-block" disabled="@(IsConnecting)" tabindex="4">
+            <button @onclick="ChangeConnectionState" type="button" class="roundBorder small-margin" style="display: inline-block" disabled="@(IsConnecting)" tabindex="4">
                 @if (IsConnecting)
                 {
                     <div>Connecting</div>
@@ -186,6 +186,7 @@
         }
         else
         {
+            _cancellationTokenSource = new();
             return StartAndRequestMessagesAsync();
         }
     }
