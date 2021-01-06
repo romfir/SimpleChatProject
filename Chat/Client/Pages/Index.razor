@@ -30,7 +30,7 @@
 
                 </div>
             }
-            <div id="anchor"></div>
+            
         }
         else
         {
@@ -39,6 +39,11 @@
                 <p>Currently there are no messages</p>
             </div>
         }
+        @if (_typingUserNames.Any())
+            {
+                <p class="writing">@(TypingMessage)<span>.</span><span>.</span><span>.</span></p>
+            }
+            <div id="anchor"></div>
     </div>
     <footer class="bottom-footer gradientDark roundBorder" style="display: inline-block">
         <EditForm Model="@_currentMessage" OnValidSubmit="@Send">
@@ -94,12 +99,6 @@
     </footer>
 </div>
 
-@*zrobic z tego komponent?*@
-@if (_typingUserNames.Any())
-{
-    <p class="writing">@(TypingMessage)<span>.</span><span>.</span><span>.</span></p>
-}
-
 @code {
     private HubConnection _hubConnection = default!;
     private List<Message> _messages = new();
@@ -135,8 +134,7 @@
             if (_messages.Exists(x => x.Id == messageId))
             {
                 _messages = _messages.Where(x => x.Id != messageId).ToList();
-            //todo mozna pokolorowac na czerowono i zrobic jakis fade out
-            StateHasChanged();
+                StateHasChanged();
             }
         });
 
@@ -178,10 +176,13 @@
 
     private async void Remove(Guid messageId)
     {
-        await _hubConnection.SendAsync("DeleteMessage", messageId, _cancellationTokenSource.Token);
+        if (IsConnected)
+        {
+            await _hubConnection.SendAsync("DeleteMessage", messageId, _cancellationTokenSource.Token);
 
-        _messages = _messages.Where(x => x.Id != messageId).ToList();
-        StateHasChanged();
+            _messages = _messages.Where(x => x.Id != messageId).ToList();
+            StateHasChanged();
+        }
     }
 
     private Task ChangeConnectionState()
@@ -200,7 +201,7 @@
 
     private void SendWritingNotification()
     {
-        if (IsConnected && string.IsNullOrEmpty(_currentMessage.User))
+        if (IsConnected && !string.IsNullOrEmpty(_currentMessage.User))
         {
             _hubConnection.SendAsync("UserWriting", _currentMessage.User);
         }
