@@ -52,9 +52,22 @@
                 </label>
             </div>
 
-            <button class="btn-primary roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block;" tabindex="3">
-                <span class="oi oi-arrow-circle-right" aria-hidden="true"></span>
-            </button>
+            <div style="display: inline-block">
+                <button @onclick="ChangeConnectionState" type="button" class="roundBorder small-margin" style="display: inline-block" disabled="@(IsConnecting)" tabindex="4">
+                    @if (IsConnecting)
+                    {
+                        <div>Connecting</div>
+                    }
+                    else if (IsConnected)
+                    {
+                        <div>Disconnect</div>
+                    }
+                    else
+                    {
+                        <div>Reconnect</div>
+                    }
+                </button>
+            </div>
 
             <br />
 
@@ -68,20 +81,12 @@
             <div class="form-group small-margin " style="display: inline-block">
             </div>
 
-            <button @onclick="ChangeConnectionState" type="button" class="roundBorder small-margin" style="display: inline-block" disabled="@(IsConnecting)" tabindex="4">
-                @if (IsConnecting)
-                {
-                    <div>Connecting</div>
-                }
-                else if (IsConnected)
-                {
-                    <div>Disconnect</div>
-                }
-                else
-                {
-                    <div>Reconnect</div>
-                }
-            </button>
+
+            <div style="display: inline-block">
+                <button class="btn-primary roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block;" tabindex="3">
+                    <span class="oi oi-arrow-circle-right" aria-hidden="true"></span>
+                </button>
+            </div>
 
         </EditForm>
     </footer>
