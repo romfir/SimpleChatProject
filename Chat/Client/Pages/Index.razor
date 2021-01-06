@@ -43,13 +43,14 @@
     <footer class="bottom-footer gradientDark roundBorder" style="display: inline-block">
         <EditForm Model="@_currentMessage" OnValidSubmit="@Send">
             <DataAnnotationsValidator />
-            <ValidationSummary />
 
             <div class="form-group small-margin " style="display: inline-block">
                 <label style="color:white" class="roundBorder">
                     User:
                     <InputText id="username" @bind-Value="_currentMessage.User" class="roundBorder" tabindex="1" autofocus />
+
                 </label>
+                <ValidationMessage For="@(() => _currentMessage.User)" />
             </div>
 
             <div style="display: inline-block">
@@ -76,6 +77,7 @@
                     Text:
                     <InputText id="message" @onkeypress="SendWritingNotification" @bind-Value="_currentMessage.Text" class="roundBorder" tabindex="2" autocomplete="off" />
                 </label>
+                <ValidationMessage For="@(() => _currentMessage.Text)" />
             </div>
 
             <div class="form-group small-margin " style="display: inline-block">
