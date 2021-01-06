@@ -4,7 +4,6 @@ using Microsoft.Extensions.Caching.Memory;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -47,22 +46,15 @@ namespace Chat.Server.Hubs
         public async Task UserWriting(string userName)
             => await Clients.Others.SendAsync("UserIsWriting", userName).ConfigureAwait(false);
 
-        public async Task RequestMessages()
-        {
-            if (_cache.TryGetValue(_cacheListName, out IEnumerable<Message> messages))
-            {
-                await Clients.Caller.SendAsync("MessageListLoad", messages).ConfigureAwait(false);
-            }
-        }
-
-        public ChannelReader<Message> RequestMessagesNew(CancellationToken cancellationToken)
+        public ChannelReader<Message> RequestMessages(CancellationToken cancellationToken)
         {
             var channel = Channel.CreateUnbounded<Message>();
-            _ = RequestMessagesNewInternal(channel.Writer, cancellationToken);
+            _ = RequestMessagesInternal(channel.Writer, cancellationToken);
+
             return channel.Reader;
         }
 
-        private async Task RequestMessagesNewInternal(ChannelWriter<Message> writer, CancellationToken cancellationToken)
+        private async Task RequestMessagesInternal(ChannelWriter<Message> writer, CancellationToken cancellationToken)
         {
             if (_cache.TryGetValue(_cacheListName, out IEnumerable<Message> messages))
             {
@@ -73,18 +65,6 @@ namespace Chat.Server.Hubs
                 }
             }
         }
-
-        //private async IAsyncEnumerable<Message> RequestMessagesNewInternal([EnumeratorCancellation] CancellationToken cancellationToken)
-        //{
-        //    if (_cache.TryGetValue(_cacheListName, out IEnumerable<Message> messages))
-        //    {
-        //        foreach (Message message in messages)
-        //        {
-        //            cancellationToken.ThrowIfCancellationRequested();
-        //            yield return message;
-        //        }
-        //    }
-        //}
 
         public override Task OnConnectedAsync() => base.OnConnectedAsync();
 

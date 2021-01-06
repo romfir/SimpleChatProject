@@ -52,11 +52,9 @@
                 </label>
             </div>
 
-
             <button class="btn-primary roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block;" tabindex="3">
                 <span class="oi oi-arrow-circle-right" aria-hidden="true"></span>
             </button>
-
 
             <br />
 
@@ -105,29 +103,32 @@
 
     private List<string> _typingUserNames = new();
 
+    private bool IsConnected
+            => _hubConnection.State == HubConnectionState.Connected;
+
+    private bool IsConnecting
+        => _hubConnection.State == HubConnectionState.Connecting || _hubConnection is null;
+
     protected override async Task OnInitializedAsync()
     {
         _hubConnection = new HubConnectionBuilder()
                                                     .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
                                                     .Build();
+        _hubConnection.On<Message>("ReceiveMessage", (message) =>
+        {
+            _messages.Add(message);
+            StateHasChanged();
+        });
 
-        _hubConnection.On<Message>
-            ("ReceiveMessage", (message) =>
+        _hubConnection.On<Guid>("DeleteMessage", (messageId) =>
+        {
+            if (_messages.Exists(x => x.Id == messageId))
             {
-                _messages.Add(message);
-                StateHasChanged();
-            });
-
-        _hubConnection.On<Guid>
-            ("DeleteMessage", (messageId) =>
-            {
-                if (_messages.Exists(x => x.Id == messageId))
-                {
-                    _messages = _messages.Where(x => x.Id != messageId).ToList();
-                //todo mozna pokolorowac na czerowono i zrobic jakis fade out
-                StateHasChanged();
-                }
-            });
+                _messages = _messages.Where(x => x.Id != messageId).ToList();
+            //todo mozna pokolorowac na czerowono i zrobic jakis fade out
+            StateHasChanged();
+            }
+        });
 
         _hubConnection.On<string>
             ("UserIsWriting", (userName) =>
@@ -146,7 +147,7 @@
         await _hubConnection.StartAsync(_cancellationTokenSource.Token);
         StateHasChanged();
 
-        var stream = _hubConnection.StreamAsync<Message>("RequestMessagesNew", _cancellationTokenSource.Token);
+        var stream = _hubConnection.StreamAsync<Message>("RequestMessages", _cancellationTokenSource.Token);
 
         _messages = new();
         await foreach (Message message in stream)
@@ -156,7 +157,7 @@
         }
     }
 
-    async void Send()
+    private async void Send()
     {
         _currentMessage.TimeStamp = DateTime.Now;
         _currentMessage.Id = Guid.NewGuid();
@@ -173,15 +174,7 @@
         StateHasChanged();
     }
 
-
-    public bool IsConnected
-            => _hubConnection.State == HubConnectionState.Connected;
-
-    public bool IsConnecting
-            => _hubConnection.State == HubConnectionState.Connecting || _hubConnection is null;
-
-
-    public Task ChangeConnectionState()
+    private Task ChangeConnectionState()
     {
         if (IsConnected)
         {
@@ -194,7 +187,7 @@
         }
     }
 
-    public void SendWritingNotification()
+    private void SendWritingNotification()
     {
         if (IsConnected && string.IsNullOrEmpty(_currentMessage.User))
         {
@@ -202,7 +195,7 @@
         }
     }
 
-    public async void ReceiveWritingNotification(string userName)
+    private async void ReceiveWritingNotification(string userName)
     {
         if (!_typingUserNames.Contains(userName))
         {

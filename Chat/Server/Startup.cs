@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using System;
 using System.Linq;
 
 namespace Chat.Server
@@ -20,7 +21,13 @@ namespace Chat.Server
         // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddSignalR();
+            services.AddSignalR(hubOptions =>
+            {
+                hubOptions.ClientTimeoutInterval = TimeSpan.FromSeconds(10);
+                hubOptions.HandshakeTimeout = TimeSpan.FromSeconds(10);
+                hubOptions.KeepAliveInterval = TimeSpan.FromSeconds(10);
+            });
+
             services.AddControllersWithViews();
             services.AddMemoryCache();
             services.AddRazorPages();
