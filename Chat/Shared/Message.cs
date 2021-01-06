@@ -20,7 +20,7 @@ namespace Chat.Shared
         [Required, MaxLength(50)]
         public string User { get; set; } = null!;
 
-        [Required, MaxLength(50), MinLength(1)]
+        [Required, MaxLength(200), MinLength(1)]
         public string Text { get; set; } = null!;
 
         public DateTime TimeStamp { get; set; }
