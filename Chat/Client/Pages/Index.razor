@@ -5,64 +5,74 @@
 @inject NavigationManager NavigationManager
 @implements IAsyncDisposable
 
-
-<EditForm Model="@_currentMessage" OnValidSubmit="@Send">
-    <DataAnnotationsValidator />
-    <ValidationSummary />
-
-    <div class="form-group">
-        <label>
-            User:
-            <InputText id="userUser" @bind-Value="_currentMessage.User" />
-        </label>
-    </div>
-    <div class="form-group">
-        <label>
-            Text:
-            <InputText id="message" @onkeypress="SendWritingNotification" @bind-Value="_currentMessage.Text" />
-            @*You cannot do @bind-value and @onchange because bi-directional binding subscribe to the onchange event.*@
-        </label>
-    </div>
-
-    <button class="btn-primary" disabled="@(!IsConnected)" type="submit">Send</button> @*da sie na podstawie disabled jakos fajnie kolorowac button?*@
-</EditForm>
-<br />
-<button @onclick="ChangeConnectionState">@(IsConnected ? "Disconnect" : "Connect")</button>
-
-
-<hr>
-
-<table>
-    <tr>
-        <th>Message</th>
-        <th>User</th>
-        <th>Time</th>
-        <th>X</th>
-    </tr>
-    @foreach (Message message in messages) //todo edycja
-    {
-        <tr bgcolor="@(message.User == _currentMessage.User ? "lightblue" : "" )">
-            @*tu zrobić jakies klasy a nie na pale kolor + dorobic porzadne klasy z formatowaniem itp*@
-            <td>@message.Text</td>
-            <td>@message.User</td>
-            <td>@message.TimeStamp</td>
-            @if (message.User == _currentMessage.User)
+<h2>Chat Messages</h2>
+<div class="Site">
+    <div class="Site-content">
+        @if (_messages.Any())
+        {
+            @foreach (Message message in _messages) //todo edycja
             {
-                <td><button @onclick="_ => Remove(message.Id)">X</button></td>
+                <div class="@(message.User == _currentMessage.User ? "container darker" : "container")">
+
+                    @if (message.User != _currentMessage.User)
+                    {
+                        <div class="user-name-right">@message.User</div>
+                    }
+                    <p>@message.Text</p>
+
+                    <span class="time-right">@message.TimeStamp</span>
+
+                    @if (message.User == _currentMessage.User)
+                    {
+                        <span class="oi oi-x remove-span" @onclick="_ => Remove(message.Id)" aria-hidden="true"></span>
+                    }
+
+                </div>
             }
-        </tr>
-    }
-</table>
+        }
+        else
+        {
+            <div id="container">
+                <p style="font-size:100px;">&#x1F622;</p>
+                <p>Currently there are no messages</p>
+            </div>
+        }
+    </div>
+    <footer class="bottom-footer gradientDark roundBorder" style="display: inline-block">
+        <EditForm Model="@_currentMessage" OnValidSubmit="@Send">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="form-group small-margin " style="display: inline-block">
+                <label style="color:white" class="roundBorder">
+                    User:
+                    <InputText id="userUser" @bind-Value="_currentMessage.User" class="roundBorder" />
+                </label>
+            </div>
+            <div class="form-group small-margin " style="display: inline-block">
+                <label style="color:white">
+                    Text:
+                    <InputText id="message" @onkeypress="SendWritingNotification" @bind-Value="_currentMessage.Text" class="roundBorder" />
+                </label>
+            </div>
+
+            <button class="btn-primary roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block;">
+                <span class="oi oi-arrow-circle-right" aria-hidden="true"></span>
+            </button>
+        </EditForm>
+        <button @onclick="ChangeConnectionState" class="roundBorder small-margin" style="display: inline-block">@(IsConnected ? "Disconnect" : "Connect")</button>
+    </footer>
+</div>
+
 @*zrobic z tego komponent?*@
 @if (_typingUserNames.Any())
 {
-    <p class="writing">@(TypingMessage) is typing<span>.</span><span>.</span><span>.</span></p>
-
+    <p class="writing">@(TypingMessage)<span>.</span><span>.</span><span>.</span></p>
 }
 
 @code {
-    private HubConnection hubConnection = default!;
-    private List<Message> messages = new();
+    private HubConnection _hubConnection = default!;
+    private List<Message> _messages = new();
 
     private Message _currentMessage = new();
 
@@ -74,23 +84,23 @@
     protected override async Task OnInitializedAsync()
     {
         //load messages from somewhere... redis? SQL? File? Ofc via chathub
-        hubConnection = new HubConnectionBuilder()
+        _hubConnection = new HubConnectionBuilder()
         .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
         .Build();
 
-        hubConnection.On<Message>
+        _hubConnection.On<Message>
             ("ReceiveMessage", (message) =>
             {
-                messages.Add(message);
+                _messages.Add(message);
                 StateHasChanged();
             });
 
-        hubConnection.On<Guid>
+        _hubConnection.On<Guid>
             ("DeleteMessage", (messageId) =>
             {
-                if (messages.Exists(x => x.Id == messageId))
+                if (_messages.Exists(x => x.Id == messageId))
                 {
-                    messages = messages.Where(x => x.Id != messageId).ToList();
+                    _messages = _messages.Where(x => x.Id != messageId).ToList();
                 //todo mozna pokolorowac na czerowono i zrobic jakis fade out
                 StateHasChanged();
                 }
@@ -98,7 +108,7 @@
 
             });
 
-        hubConnection.On<string>
+        _hubConnection.On<string>
             ("UserIsWriting", (userName) =>
             {
                 if (userName != _currentMessage.User)
@@ -109,47 +119,65 @@
 
             });
 
-        await hubConnection.StartAsync();
+        _hubConnection.On<IEnumerable<Message>>
+            ("MessageListLoad", (messages) =>
+            {
+                _messages = messages.ToList();
+                StateHasChanged();
+
+            });
+
+        await StartAndRequestMessagesAsync();
+    }
+
+    async Task StartAndRequestMessagesAsync()
+    {
+        await _hubConnection.StartAsync();
+
+        await _hubConnection.SendAsync("RequestMessages");
     }
 
     async void Send()
     {
         _currentMessage.TimeStamp = DateTime.Now;
         _currentMessage.Id = Guid.NewGuid();
-        await hubConnection.SendAsync("SendMessage", _currentMessage);
+        await _hubConnection.SendAsync("SendMessage", _currentMessage);
 
         _currentMessage.Text = "";
     }
 
-    async void Remove(Guid messageId)
+    private async void Remove(Guid messageId)
     {
-        await hubConnection.SendAsync("DeleteMessage", messageId);
+        await _hubConnection.SendAsync("DeleteMessage", messageId);
 
-        //to do metody?
-        messages = messages.Where(x => x.Id != messageId).ToList();
+        _messages = _messages.Where(x => x.Id != messageId).ToList();
         StateHasChanged();
     }
 
 
     public bool IsConnected
-    => hubConnection.State == HubConnectionState.Connected;
+    => _hubConnection.State == HubConnectionState.Connected;
 
 
     public Task ChangeConnectionState()
     {
         if (IsConnected)
         {
-            return hubConnection.StopAsync();
+            return _hubConnection.StopAsync();
         }
         else
         {
-            return hubConnection.StartAsync();
+            return StartAndRequestMessagesAsync();
         }
     }
 
-    //todo nie wysylac zawsze skorzystac z jakichs argumentow!
-    public Task SendWritingNotification()
-        => hubConnection.SendAsync("UserWriting", _currentMessage.User);
+    public void SendWritingNotification()
+    {
+        if (IsConnected && string.IsNullOrEmpty(_currentMessage.User))
+        {
+            _hubConnection.SendAsync("UserWriting", _currentMessage.User);
+        }
+    }
 
     public async void ReceiveWritingNotification(string userName)
     {
@@ -170,6 +198,6 @@
 
     public async ValueTask DisposeAsync()
     {
-        await hubConnection.DisposeAsync();
+        await _hubConnection.DisposeAsync();
     }
 }
