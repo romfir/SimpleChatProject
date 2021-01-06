@@ -20,6 +20,10 @@
                         <div class="user-name-right">@message.User</div>
                     }
                     <p>@message.Text</p>
+                    @if (message.Base64FileSrc is object)
+                    {
+                        <img class="rounded m-1" src="@message.Base64FileSrc" />
+                    }
 
                     <span class="time-right">@message.TimeStamp</span>
 
@@ -89,7 +93,7 @@
                     <span class="oi oi-arrow-circle-right" aria-hidden="true"></span>
                 </button>
             </div>
-
+            <InputFile OnChange="@OnInputFileChange" value="" accept="image/png,image/gif,image/jpeg" />
         </EditForm>
     </footer>
 </div>
@@ -219,6 +223,17 @@
             _typingUserNames.Remove(userName);
             StateHasChanged();
         }
+    }
+
+    private async Task OnInputFileChange(InputFileChangeEventArgs e)
+    {
+        var format = "image/png";
+
+        IBrowserFile resizedImageFile = await e.File.RequestImageFileAsync(format, 100, 100);
+        var buffer = new byte[resizedImageFile.Size];
+        await resizedImageFile.OpenReadStream().ReadAsync(buffer, _cancellationTokenSource.Token);
+
+        _currentMessage.Base64FileSrc = $"data:{format};base64,{Convert.ToBase64String(buffer)}";
     }
 
     public async ValueTask DisposeAsync()

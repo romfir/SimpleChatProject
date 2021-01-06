@@ -24,5 +24,7 @@ namespace Chat.Shared
         public string Text { get; set; } = null!;
 
         public DateTime TimeStamp { get; set; }
+
+        public string? Base64FileSrc { get; set; }
     }
 }
