@@ -8,7 +8,7 @@
 
 <h2>Chat Messages</h2>
 <div class="Site">
-    <div class="Site-content">
+    <div class="Site-content" id="scroller">
         @if (_messages.Any())
         {
             @foreach (Message message in _messages) //todo edycja
@@ -30,6 +30,7 @@
 
                 </div>
             }
+            <div id="anchor"></div>
         }
         else
         {
@@ -47,7 +48,7 @@
             <div class="form-group small-margin " style="display: inline-block">
                 <label style="color:white" class="roundBorder">
                     User:
-                    <InputText id="userUser" @bind-Value="_currentMessage.User" class="roundBorder" tabindex="1" />
+                    <InputText id="userUser" @bind-Value="_currentMessage.User" class="roundBorder" tabindex="1" autofocus />
                 </label>
             </div>
 
@@ -97,16 +98,18 @@
 
     private Message _currentMessage = new();
 
+    private CancellationTokenSource _cancellationTokenSource = new();
+
     private string TypingMessage
-            => $"{string.Join(", ", _typingUserNames)} {(_typingUserNames.Count() == 1 ? " is " : " are ")} typing";
+        => $"{string.Join(", ", _typingUserNames)} {(_typingUserNames.Count() == 1 ? " is " : " are ")} typing";
 
     private List<string> _typingUserNames = new();
 
     protected override async Task OnInitializedAsync()
     {
         _hubConnection = new HubConnectionBuilder()
-        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
-        .Build();
+                                                    .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+                                                    .Build();
 
         _hubConnection.On<Message>
             ("ReceiveMessage", (message) =>
@@ -121,8 +124,8 @@
                 if (_messages.Exists(x => x.Id == messageId))
                 {
                     _messages = _messages.Where(x => x.Id != messageId).ToList();
-                    //todo mozna pokolorowac na czerowono i zrobic jakis fade out
-                    StateHasChanged();
+                //todo mozna pokolorowac na czerowono i zrobic jakis fade out
+                StateHasChanged();
                 }
             });
 
@@ -135,36 +138,16 @@
                 }
             });
 
-        //_hubConnection.On<IEnumerable<Message>>
-        //    ("MessageListLoad", (messages) =>
-        //    {
-        //        _messages = messages.ToList();
-        //        StateHasChanged();
-        //    });
-
         await StartAndRequestMessagesAsync();
     }
 
-    async Task StartAndRequestMessagesAsync()
+    private async Task StartAndRequestMessagesAsync()
     {
-        await _hubConnection.StartAsync();
+        await _hubConnection.StartAsync(_cancellationTokenSource.Token);
         StateHasChanged();
 
-        // await _hubConnection.SendAsync("RequestMessages");
+        var stream = _hubConnection.StreamAsync<Message>("RequestMessagesNew", _cancellationTokenSource.Token);
 
-        var cancellationTokenSource = new CancellationTokenSource();
-
-        //todo da sie to jakos streamowac? W przyszlosci chce ladowac fotki ktore beda wazyc wiecej
-
-        var stream = _hubConnection.StreamAsync<Message>("RequestMessagesNew", cancellationTokenSource.Token);
-        //while (await channel.WaitToReadAsync())
-        //{
-        //    while (channel.TryRead(out var message))
-        //    {
-        //        _messages.Add(message);
-        //        StateHasChanged();
-        //    }
-        //}
         _messages = new();
         await foreach (Message message in stream)
         {
@@ -177,14 +160,14 @@
     {
         _currentMessage.TimeStamp = DateTime.Now;
         _currentMessage.Id = Guid.NewGuid();
-        await _hubConnection.SendAsync("SendMessage", _currentMessage);
+        await _hubConnection.SendAsync("SendMessage", _currentMessage, _cancellationTokenSource.Token);
 
         _currentMessage.Text = "";
     }
 
     private async void Remove(Guid messageId)
     {
-        await _hubConnection.SendAsync("DeleteMessage", messageId);
+        await _hubConnection.SendAsync("DeleteMessage", messageId, _cancellationTokenSource.Token);
 
         _messages = _messages.Where(x => x.Id != messageId).ToList();
         StateHasChanged();
@@ -202,6 +185,7 @@
     {
         if (IsConnected)
         {
+            _cancellationTokenSource.Cancel();
             return _hubConnection.StopAsync();
         }
         else
@@ -226,7 +210,7 @@
             StateHasChanged();
 
 
-            await Task.Delay(1000);
+            await Task.Delay(1000, _cancellationTokenSource.Token);
 
             _typingUserNames.Remove(userName);
             StateHasChanged();
@@ -234,5 +218,9 @@
     }
 
     public async ValueTask DisposeAsync()
-            => await _hubConnection.DisposeAsync();
+    {
+        _cancellationTokenSource.Cancel();
+
+        await _hubConnection.DisposeAsync();
+    }
 }
