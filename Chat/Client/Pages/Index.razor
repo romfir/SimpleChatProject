@@ -1,12 +1,14 @@
-﻿@page "/"
+﻿@page "/{chatRoomName?}"
 @using Microsoft.AspNetCore.SignalR.Client
 @using Chat.Shared
 @using System.Linq;
 @using System.Threading
+@using Chat.Client.Shared.Models
+@using System.Text.RegularExpressions
 @inject NavigationManager NavigationManager
 @implements IAsyncDisposable
 
-<h2>Chat Messages</h2>
+<h2>Chat room: @ChatRoomNameParsed</h2>
 <div class="Site">
     <div class="Site-content" id="scroller">
         @if (_messages.Any())
@@ -25,12 +27,12 @@
 
                     @if (message.User == _currentMessage.User)
                     {
-                        <span class="oi oi-x remove-span" @onclick="_ => Remove(message.Id)" aria-hidden="true"></span>
+                        <span class="oi oi-x remove-span" @onclick="_ => DeleteMessage(message.Id)" aria-hidden="true"></span>
                     }
 
                 </div>
             }
-            
+
         }
         else
         {
@@ -40,10 +42,10 @@
             </div>
         }
         @if (_typingUserNames.Any())
-            {
-                <p class="writing">@(TypingMessage)<span>.</span><span>.</span><span>.</span></p>
-            }
-            <div id="anchor"></div>
+        {
+            <p class="writing">@(TypingMessage)<span>.</span><span>.</span><span>.</span></p>
+        }
+        <div id="anchor"></div>
     </div>
     <footer class="bottom-footer gradientDark roundBorder" style="display: inline-block">
         <EditForm Model="@_currentMessage" OnValidSubmit="@Send">
@@ -59,7 +61,7 @@
             </div>
 
             <div style="display: inline-block">
-                <button @onclick="ChangeConnectionState" type="button" class="roundBorder small-margin" style="display: inline-block" disabled="@(IsConnecting)" tabindex="4">
+                <button @onclick="ChangeConnectionStateAsync" type="button" class="roundBorder small-margin" style="display: inline-block" disabled="@(IsConnecting)" tabindex="4">
                     @if (IsConnecting)
                     {
                         <div>Connecting</div>
@@ -90,16 +92,32 @@
 
 
             <div style="display: inline-block">
-                <button class="btn-primary roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block; width:80px;" tabindex="3">
+                <button class="btn-primary roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block; width:80px;" tabindex="5">
                     <span class="oi oi-arrow-circle-right" aria-hidden="true"></span>
                 </button>
             </div>
 
         </EditForm>
+
+        <EditForm Model="@_newRoomModel" OnValidSubmit="@ChangeChatRoom">
+            <DataAnnotationsValidator />
+            <label style="color:white">
+                New Chat Room Name:
+                <InputText id="ChatRoom" @onkeypress="() => StateHasChanged()" @bind-Value="_newRoomModel.NewChatRoomName" class="roundBorder" tabindex="3" autocomplete="off" />
+                <ValidationMessage For="@(() => _newRoomModel.NewChatRoomName)" />
+
+            </label>
+            <button class="roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block" tabindex="6">
+                Change
+            </button>
+        </EditForm>
     </footer>
 </div>
 
 @code {
+    [Parameter]
+    public string ChatRoomName { get; set; } = null!;
+
     private HubConnection _hubConnection = default!;
     private List<Message> _messages = new();
 
@@ -112,20 +130,29 @@
 
     private List<string> _typingUserNames = new();
 
+    private UserNewRoomModel _newRoomModel = new();
+
     private bool IsConnected
-            => _hubConnection.State == HubConnectionState.Connected;
+        => _hubConnection.State == HubConnectionState.Connected;
 
     private bool IsConnecting
-        => _hubConnection.State == HubConnectionState.Connecting || _hubConnection is null;
+        => _hubConnection is null || _hubConnection.State == HubConnectionState.Connecting;
+
+    public string ChatRoomNameParsed
+        => Regex.IsMatch(ChatRoomName, @"\s") ? "\"" + ChatRoomName + "\"" : ChatRoomName;
 
     protected override async Task OnInitializedAsync()
     {
+        ChatRoomName = ChatRoomName ?? "Global";
+
         _hubConnection = new HubConnectionBuilder()
-                                                    .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
-                                                    .Build();
+                                            .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+                                            .Build();
+
         _hubConnection.On<Message>("ReceiveMessage", (message) =>
         {
-            _messages.Add(message);
+        //todo zamienic List<Message> na cos thread safe? Chyba jak leci duzo wiadomosci to cos sie wali
+        _messages.Add(message);
             StateHasChanged();
         });
 
@@ -138,54 +165,65 @@
             }
         });
 
-        _hubConnection.On<string>
-            ("UserIsWriting", (userName) =>
+        //todo to przestalo dzialac! Dlaczego?
+
+        _hubConnection.On<string>("UserIsWriting", (userName) =>
+        {
+            if (userName != _currentMessage.User)
             {
-                if (userName != _currentMessage.User)
-                {
-                    ReceiveWritingNotification(userName);
-                }
-            });
+                ReceiveWritingNotification(userName);
+            }
+        });
 
         await StartAndRequestMessagesAsync();
     }
 
     private async Task StartAndRequestMessagesAsync()
     {
-        await _hubConnection.StartAsync(_cancellationTokenSource.Token);
+        await _hubConnection.StartAsync(_cancellationTokenSource.Token).ConfigureAwait(false);
+
+        await _hubConnection.SendAsync("AddToGroup", ChatRoomName).ConfigureAwait(false);
+
         StateHasChanged();
 
-        var stream = _hubConnection.StreamAsync<Message>("RequestMessages", _cancellationTokenSource.Token);
+        await RequestMessagesAsync().ConfigureAwait(false);
+    }
+
+    private async Task RequestMessagesAsync()
+    {
+        var stream = _hubConnection.StreamAsync<Message>("RequestMessages", ChatRoomName, _cancellationTokenSource.Token);
 
         _messages = new();
         await foreach (Message message in stream)
         {
-            _messages.Add(message);
             StateHasChanged();
+            _messages.Add(message);
         }
+
+        StateHasChanged();
     }
 
     private async void Send()
     {
         _currentMessage.TimeStamp = DateTime.Now;
         _currentMessage.Id = Guid.NewGuid();
-        await _hubConnection.SendAsync("SendMessage", _currentMessage, _cancellationTokenSource.Token);
+        await _hubConnection.SendAsync("SendMessage", _currentMessage, ChatRoomName, _cancellationTokenSource.Token);
 
         _currentMessage.Text = "";
     }
 
-    private async void Remove(Guid messageId)
+    private async void DeleteMessage(Guid messageId)
     {
         if (IsConnected)
         {
-            await _hubConnection.SendAsync("DeleteMessage", messageId, _cancellationTokenSource.Token);
+            await _hubConnection.SendAsync("DeleteMessage", messageId, ChatRoomName, _cancellationTokenSource.Token);
 
             _messages = _messages.Where(x => x.Id != messageId).ToList();
             StateHasChanged();
         }
     }
 
-    private Task ChangeConnectionState()
+    private Task ChangeConnectionStateAsync()
     {
         if (IsConnected)
         {
@@ -203,7 +241,7 @@
     {
         if (IsConnected && !string.IsNullOrEmpty(_currentMessage.User))
         {
-            _hubConnection.SendAsync("UserWriting", _currentMessage.User);
+            _hubConnection.SendAsync("UserWriting", ChatRoomName, _currentMessage.User);
         }
     }
 
@@ -220,6 +258,34 @@
             _typingUserNames.Remove(userName);
             StateHasChanged();
         }
+    }
+
+    private async Task ChangeChatRoom()
+    {
+        _newRoomModel.NewChatRoomName = _newRoomModel.NewChatRoomName.Trim();
+        if (ChatRoomName == _newRoomModel.NewChatRoomName)
+        {
+            return;
+        }
+
+        if (!IsConnected)
+        {
+            await _hubConnection.StartAsync(_cancellationTokenSource.Token).ConfigureAwait(false);
+        }
+        else
+        {
+            _cancellationTokenSource.Cancel();
+            _cancellationTokenSource = new();
+        }
+
+        await _hubConnection.SendAsync("RemoveFromGroup", ChatRoomName, _cancellationTokenSource.Token).ConfigureAwait(false);
+
+        ChatRoomName = _newRoomModel.NewChatRoomName;
+        StateHasChanged();
+
+        await _hubConnection.SendAsync("AddToGroup", ChatRoomName, _cancellationTokenSource.Token).ConfigureAwait(false);
+
+        await RequestMessagesAsync().ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()

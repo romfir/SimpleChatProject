@@ -19,44 +19,61 @@ namespace Chat.Server.Hubs
         public ChatHub(IMemoryCache cache)
             => _cache = cache;
 
-        public async Task SendMessage(Message message)
-        {
-            await Clients.All.SendAsync("ReceiveMessage", message).ConfigureAwait(false);
+        public async Task AddToGroup(string chatRoomName)
+           => await Groups.AddToGroupAsync(Context.ConnectionId, chatRoomName).ConfigureAwait(false);
 
-            if (_cache.TryGetValue(_cacheListName, out IEnumerable<Message> messages))
+        public async Task RemoveFromGroup(string chatRoomName)
+            => await Groups.RemoveFromGroupAsync(Context.ConnectionId, chatRoomName).ConfigureAwait(false);
+
+        //todo get na liste chatroomów?
+        //todo sprawdzac czy id chatRoomName nie jest nullem/pusty?
+        public async Task SendMessage(Message message, string chatRoomName)
+        {
+            await Clients.Group(chatRoomName).SendAsync("ReceiveMessage", message).ConfigureAwait(false);
+
+            string chatGroupListName = GetGroupCacheListName(chatRoomName);
+
+            if (_cache.TryGetValue(chatGroupListName, out IEnumerable<Message> messages))
             {
-                _cache.Set(_cacheListName, messages.Append(message));
+                _cache.Set(chatGroupListName, messages.Append(message));
             }
             else
             {
-                _cache.Set(_cacheListName, new List<Message> { message });
+                _cache.Set(chatGroupListName, (IEnumerable<Message>)new List<Message> { message }); //todo dodac extension method .Yield?
             }
         }
 
         //todo 2 walidacja usera ofc jakby jakas byla
-        public async Task DeleteMessage(Guid messageId)
+        //todo bug czasami ostatnia wiadomosc znika? Nie pojawia sie na liscie mimo tego ze idzie request
+
+        // IMemoryCache NIE jest thread safe! Zrobic wlasny locking mechanism?
+        public async Task DeleteMessage(Guid messageId, string chatRoomName)
         {
-            if (_cache.TryGetValue(_cacheListName, out IEnumerable<Message> messages))
+            string chatGroupListName = GetGroupCacheListName(chatRoomName);
+
+            if (_cache.TryGetValue(chatGroupListName, out IEnumerable<Message> messages))
             {
-                _cache.Set(_cacheListName, messages.Where(m => m.Id != messageId).ToList());
+                _cache.Set(chatGroupListName, messages.Where(m => m.Id != messageId));
             }
-            await Clients.All.SendAsync("DeleteMessage", messageId).ConfigureAwait(false);
+
+            await Clients.Group(chatRoomName).SendAsync("DeleteMessage", messageId).ConfigureAwait(false);
         }
 
-        public async Task UserWriting(string userName)
-            => await Clients.Others.SendAsync("UserIsWriting", userName).ConfigureAwait(false);
+        //todo to przestalo dzialac! Dlaczego?
+        public async Task UserWriting(string userName, string chatRoomName)
+            => await Clients.OthersInGroup(chatRoomName).SendAsync("UserIsWriting", userName).ConfigureAwait(false);
 
-        public ChannelReader<Message> RequestMessages(CancellationToken cancellationToken)
+        public ChannelReader<Message> RequestMessages(string chatRoomName, CancellationToken cancellationToken)
         {
             var channel = Channel.CreateUnbounded<Message>();
-            _ = RequestMessagesInternal(channel.Writer, cancellationToken);
+            _ = RequestMessagesInternal(chatRoomName, channel.Writer, cancellationToken);
 
             return channel.Reader;
         }
 
-        private async Task RequestMessagesInternal(ChannelWriter<Message> writer, CancellationToken cancellationToken)
+        private async Task RequestMessagesInternal(string chatRoomName, ChannelWriter<Message> writer, CancellationToken cancellationToken)
         {
-            if (_cache.TryGetValue(_cacheListName, out IEnumerable<Message> messages))
+            if (_cache.TryGetValue(GetGroupCacheListName(chatRoomName), out IEnumerable<Message> messages))
             {
                 foreach (Message message in messages)
                 {
@@ -69,5 +86,8 @@ namespace Chat.Server.Hubs
         public override Task OnConnectedAsync() => base.OnConnectedAsync();
 
         public override Task OnDisconnectedAsync(Exception? exception) => base.OnDisconnectedAsync(exception);
+
+        private static string GetGroupCacheListName(string groupName)
+            => _cacheListName + ":" + groupName;
     }
 }
