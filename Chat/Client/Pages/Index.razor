@@ -241,7 +241,7 @@
     {
         if (IsConnected && !string.IsNullOrEmpty(_currentMessage.User))
         {
-            _hubConnection.SendAsync("UserWriting", ChatRoomName, _currentMessage.User);
+            _hubConnection.SendAsync("UserWriting", _currentMessage.User, ChatRoomName);
         }
     }
 
