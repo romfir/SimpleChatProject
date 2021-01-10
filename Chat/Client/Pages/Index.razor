@@ -8,42 +8,47 @@
 @inject NavigationManager NavigationManager
 @implements IAsyncDisposable
 
-<h2>Chat room: @ChatRoomNameParsed</h2>
+
+<nav class="navbar navbar-expand-lg navbar-light fix fixed-top " style="position: sticky">
+    <div style="margin:0 auto;" class="roundBorder gradientDark">
+        <h2 class="ml-md-auto" style="color:white; padding-left:1em; padding-right:1em">Chat room: @ChatRoomNameParsed</h2>
+    </div>
+</nav>
 <div class="Site">
     <div class="Site-content" id="scroller">
         @if (_messages.Any())
         {
-            @foreach (Message message in _messages) //todo edycja
+        @foreach (Message message in _messages) //todo edycja
             {
-                <div class="@(message.User == _currentMessage.User ? "container darker" : "container")">
+        <div class="@(message.User == _currentMessage.User ? "container darker" : "container")">
 
-                    @if (message.User != _currentMessage.User)
+            @if (message.User != _currentMessage.User)
                     {
-                        <div class="user-name-right">@message.User</div>
+            <div class="user-name-right">@message.User</div>
                     }
-                    <p>@message.Text</p>
+            <p>@message.Text</p>
 
-                    <span class="time-right">@message.TimeStamp</span>
+            <span class="time-right">@message.TimeStamp</span>
 
-                    @if (message.User == _currentMessage.User)
+            @if (message.User == _currentMessage.User)
                     {
-                        <span class="oi oi-x remove-span" @onclick="_ => DeleteMessage(message.Id)" aria-hidden="true"></span>
+            <span class="oi oi-x remove-span" @onclick="_ => DeleteMessage(message.Id)" aria-hidden="true"></span>
                     }
 
-                </div>
+        </div>
             }
 
         }
         else
         {
-            <div id="container">
-                <p style="font-size:100px;">&#x1F622;</p>
-                <p>Currently there are no messages</p>
-            </div>
+        <div id="container">
+            <p style="font-size:100px;">&#x1F622;</p>
+            <p>Currently there are no messages</p>
+        </div>
         }
         @if (_typingUserNames.Any())
         {
-            <p class="writing">@(TypingMessage)<span>.</span><span>.</span><span>.</span></p>
+        <p class="writing">@(TypingMessage)<span>.</span><span>.</span><span>.</span></p>
         }
         <div id="anchor"></div>
     </div>
@@ -64,15 +69,15 @@
                 <button @onclick="ChangeConnectionStateAsync" type="button" class="roundBorder small-margin" style="display: inline-block" disabled="@(IsConnecting)" tabindex="4">
                     @if (IsConnecting)
                     {
-                        <div>Connecting</div>
+                    <div>Connecting</div>
                     }
                     else if (IsConnected)
                     {
-                        <div>Disconnect</div>
+                    <div>Disconnect</div>
                     }
                     else
                     {
-                        <div>Reconnect</div>
+                    <div>Reconnect</div>
                     }
                 </button>
             </div>
