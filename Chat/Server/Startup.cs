@@ -23,9 +23,9 @@ namespace Chat.Server
         {
             services.AddSignalR(hubOptions =>
             {
-                hubOptions.ClientTimeoutInterval = TimeSpan.FromSeconds(10);
-                hubOptions.HandshakeTimeout = TimeSpan.FromSeconds(10);
-                hubOptions.KeepAliveInterval = TimeSpan.FromSeconds(10);
+                hubOptions.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+                hubOptions.HandshakeTimeout = TimeSpan.FromSeconds(15);
+                hubOptions.KeepAliveInterval = TimeSpan.FromSeconds(15);
             });
 
             services.AddControllersWithViews();
