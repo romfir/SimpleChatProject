@@ -29,12 +29,28 @@ namespace Chat.Server.Hubs
         //todo sprawdzac czy id chatRoomName nie jest nullem/pusty?
         public async Task SendMessage(Message message, string chatRoomName)
         {
+            message.TimeStamp = DateTime.Now;
+            message.Id = Guid.NewGuid();
+
             await Clients.Group(chatRoomName).SendAsync("ReceiveMessage", message).ConfigureAwait(false);
 
             string chatGroupListName = GetGroupCacheListName(chatRoomName);
 
             if (_cache.TryGetValue(chatGroupListName, out IEnumerable<Message> messages))
             {
+                //todo to trzymanie list jest po prostu złe
+                //dodanie nowego elementu nie powinno wymagac pobrania calej listy!
+                //to bedzie staszne jakbym dodal obsluge fotek w wiadomosciach (base64?) chyba ze bylyby na serwerze z jakims id po prostu
+
+                //jesli nie wymysle nic lepszego to mozna trzymac jedna liste guidów i kazda wiadomosc oddzielnie w memorycache to nie wydaje sie zle
+                //+ lista chatroomow?
+
+                // 1. Lista chatroomów key: chatrooms i w nim ienumerable z nazwami
+                //      1.1 Przy nowej wiadomosci jest sprawdzane czy w liscie jest ten channel, jak jest to get listy i do niej dodanie + dodanie normalne
+
+                // 2. Lista widomosci na chatroom, key: messages:chatroomnamne i w nim ienumerable z guidami
+
+                // 3. Same wiadomosci trzymane po prostu message:guid i message w nim
                 _cache.Set(chatGroupListName, messages.Append(message));
             }
             else
@@ -44,9 +60,9 @@ namespace Chat.Server.Hubs
         }
 
         //todo 2 walidacja usera ofc jakby jakas byla
-        //todo bug czasami ostatnia wiadomosc znika? Nie pojawia sie na liscie mimo tego ze idzie request
 
         // IMemoryCache NIE jest thread safe! Zrobic wlasny locking mechanism?
+        //todo isemaphoreslim? Ale tylko na ta dodatkowa liste z guidami jak bedzie
         public async Task DeleteMessage(Guid messageId, string chatRoomName)
         {
             string chatGroupListName = GetGroupCacheListName(chatRoomName);
@@ -59,13 +75,12 @@ namespace Chat.Server.Hubs
             await Clients.Group(chatRoomName).SendAsync("DeleteMessage", messageId).ConfigureAwait(false);
         }
 
-        //todo to przestalo dzialac! Dlaczego?
         public async Task UserWriting(string userName, string chatRoomName)
             => await Clients.OthersInGroup(chatRoomName).SendAsync("UserIsWriting", userName).ConfigureAwait(false);
 
         public ChannelReader<Message> RequestMessages(string chatRoomName, CancellationToken cancellationToken)
         {
-            var channel = Channel.CreateUnbounded<Message>();
+            var channel = Channel.CreateUnbounded<Message>(); 
             _ = RequestMessagesInternal(chatRoomName, channel.Writer, cancellationToken);
 
             return channel.Reader;
@@ -80,9 +95,12 @@ namespace Chat.Server.Hubs
                     cancellationToken.ThrowIfCancellationRequested();
                     await writer.WriteAsync(message, cancellationToken).ConfigureAwait(false);
                 }
+
+                writer.Complete(); //?
             }
         }
 
+        //todo liczba userow gdzies wyswietlona? (lista? do listy trzeba by miec username i handlowac jego zmiane... latwiej dodac normalne logowanie)
         public override Task OnConnectedAsync() => base.OnConnectedAsync();
 
         public override Task OnDisconnectedAsync(Exception? exception) => base.OnDisconnectedAsync(exception);
