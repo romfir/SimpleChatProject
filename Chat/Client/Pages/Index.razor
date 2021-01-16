@@ -270,10 +270,15 @@
     private async Task ChangeChatRoom()
     {
         _newRoomModel.NewChatRoomName = _newRoomModel.NewChatRoomName.Trim();
+
+
+
         if (ChatRoomName == _newRoomModel.NewChatRoomName)
         {
             return;
         }
+
+        NavigationManager.NavigateTo($"/{_newRoomModel.NewChatRoomName}");
 
         if (!IsConnected)
         {
