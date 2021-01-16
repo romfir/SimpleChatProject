@@ -5,6 +5,9 @@
 @using System.Threading
 @using Chat.Client.Shared.Models
 @using System.Text.RegularExpressions
+@using Blazored.LocalStorage
+
+@inject ILocalStorageService localStorage
 @inject NavigationManager NavigationManager
 @implements IAsyncDisposable
 @* todo go to top/bottom jak sie wgl da samym c#? *@
@@ -142,6 +145,8 @@
 
     private Message _currentMessage = new();
 
+    private const string _userNameLocalStorageKey = "User";
+
     private CancellationTokenSource _cancellationTokenSource = new();
 
     private string TypingMessage
@@ -165,8 +170,15 @@
         ChatRoomName = ChatRoomName ?? "Global";
 
         _hubConnection = new HubConnectionBuilder()
-                                            .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
-                                            .Build();
+                                        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+                                        .Build();
+
+        string userNameFromLocalStorage = await localStorage.GetItemAsync<string>(_userNameLocalStorageKey);
+
+        if (userNameFromLocalStorage is object)
+        {
+            _currentMessage.User = userNameFromLocalStorage;
+        }
 
         _hubConnection.On<Message>("ReceiveMessage", (message) =>
         {
@@ -232,6 +244,13 @@
         await _hubConnection.SendAsync("SendMessage", _currentMessage, ChatRoomName, _cancellationTokenSource.Token);
 
         _currentMessage.Text = "";
+
+        string userNameInLocalStorage = await localStorage.GetItemAsync<string>(_userNameLocalStorageKey);
+
+        if (_currentMessage.User != userNameInLocalStorage)
+        {
+            await localStorage.SetItemAsync(_userNameLocalStorageKey, _currentMessage.User);
+        }
     }
 
     private Task DeleteMessage(Guid messageId)
