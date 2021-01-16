@@ -1,4 +1,5 @@
-﻿using Chat.Shared;
+﻿using Chat.Server.Tools;
+using Chat.Shared;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Memory;
 using System;
@@ -7,13 +8,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using Tools;
 
 namespace Chat.Server.Hubs
 {
     public class ChatHub : Hub
     {
-        private const string _cacheListName = "list";
-
         private readonly IMemoryCache _cache;
 
         public ChatHub(IMemoryCache cache)
@@ -26,51 +26,52 @@ namespace Chat.Server.Hubs
             => await Groups.RemoveFromGroupAsync(Context.ConnectionId, chatRoomName).ConfigureAwait(false);
 
         //todo get na liste chatroomów?
-        //todo sprawdzac czy id chatRoomName nie jest nullem/pusty?
         public async Task SendMessage(Message message, string chatRoomName)
         {
+            Preconditions.CheckNotNull(message, nameof(message));
+            Preconditions.CheckNotNull(chatRoomName, nameof(chatRoomName));
+
             message.TimeStamp = DateTime.Now;
             message.Id = Guid.NewGuid();
 
             await Clients.Group(chatRoomName).SendAsync("ReceiveMessage", message).ConfigureAwait(false);
 
-            string chatGroupListName = GetGroupCacheListName(chatRoomName);
-
-            if (_cache.TryGetValue(chatGroupListName, out IEnumerable<Message> messages))
+            if (_cache.TryGetValue(CacheKeys.ChatRoomsListKey, out IEnumerable<string> chatRooms))
             {
-                //todo to trzymanie list jest po prostu złe
-                //dodanie nowego elementu nie powinno wymagac pobrania calej listy!
-                //to bedzie staszne jakbym dodal obsluge fotek w wiadomosciach (base64?) chyba ze bylyby na serwerze z jakims id po prostu
-
-                //jesli nie wymysle nic lepszego to mozna trzymac jedna liste guidów i kazda wiadomosc oddzielnie w memorycache to nie wydaje sie zle
-                //+ lista chatroomow?
-
-                // 1. Lista chatroomów key: chatrooms i w nim ienumerable z nazwami
-                //      1.1 Przy nowej wiadomosci jest sprawdzane czy w liscie jest ten channel, jak jest to get listy i do niej dodanie + dodanie normalne
-
-                // 2. Lista widomosci na chatroom, key: messages:chatroomnamne i w nim ienumerable z guidami
-
-                // 3. Same wiadomosci trzymane po prostu message:guid i message w nim
-                _cache.Set(chatGroupListName, messages.Append(message));
+                if (!chatRooms.Any(a => a == chatRoomName))
+                {
+                    _cache.Set(CacheKeys.ChatRoomsListKey, chatRooms.Append(chatRoomName));
+                }
             }
             else
             {
-                _cache.Set(chatGroupListName, (IEnumerable<Message>)new List<Message> { message }); //todo dodac extension method .Yield?
+                _cache.Set(CacheKeys.ChatRoomsListKey, chatRoomName.Yield());
             }
+
+            string messageIdsKey = GetMessageListKey(chatRoomName);
+
+            if (_cache.TryGetValue(messageIdsKey, out IEnumerable<Guid> messagesIds))
+            {
+                _cache.Set(messageIdsKey, messagesIds.Append(message.Id));
+            }
+            else
+            {
+                _cache.Set(messageIdsKey, message.Id.Yield());
+            }
+
+            _cache.Set(message.Id, message);
         }
 
-        //todo 2 walidacja usera ofc jakby jakas byla
-
-        // IMemoryCache NIE jest thread safe! Zrobic wlasny locking mechanism?
-        //todo isemaphoreslim? Ale tylko na ta dodatkowa liste z guidami jak bedzie
         public async Task DeleteMessage(Guid messageId, string chatRoomName)
         {
-            string chatGroupListName = GetGroupCacheListName(chatRoomName);
+            string messageIdsKey = GetMessageListKey(chatRoomName);
 
-            if (_cache.TryGetValue(chatGroupListName, out IEnumerable<Message> messages))
+            if (_cache.TryGetValue(messageIdsKey, out IEnumerable<Guid> messageIds))
             {
-                _cache.Set(chatGroupListName, messages.Where(m => m.Id != messageId));
+                _cache.Set(messageIdsKey, messageIds.Where(i => i != messageId));
             }
+
+            _cache.Remove(messageId);
 
             await Clients.Group(chatRoomName).SendAsync("DeleteMessage", messageId).ConfigureAwait(false);
         }
@@ -80,7 +81,7 @@ namespace Chat.Server.Hubs
 
         public ChannelReader<Message> RequestMessages(string chatRoomName, CancellationToken cancellationToken)
         {
-            var channel = Channel.CreateUnbounded<Message>(); 
+            var channel = Channel.CreateUnbounded<Message>();
             _ = RequestMessagesInternal(chatRoomName, channel.Writer, cancellationToken);
 
             return channel.Reader;
@@ -88,24 +89,31 @@ namespace Chat.Server.Hubs
 
         private async Task RequestMessagesInternal(string chatRoomName, ChannelWriter<Message> writer, CancellationToken cancellationToken)
         {
-            if (_cache.TryGetValue(GetGroupCacheListName(chatRoomName), out IEnumerable<Message> messages))
+            if (_cache.TryGetValue(GetMessageListKey(chatRoomName), out IEnumerable<Guid> messageIds))
             {
-                foreach (Message message in messages)
+                foreach (Guid messageId in messageIds)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    await writer.WriteAsync(message, cancellationToken).ConfigureAwait(false);
-                }
 
-                writer.Complete(); //?
+                    await writer.WriteAsync(_cache.Get<Message>(messageId), cancellationToken).ConfigureAwait(false);
+                }
             }
+
+            writer.Complete();
         }
 
         //todo liczba userow gdzies wyswietlona? (lista? do listy trzeba by miec username i handlowac jego zmiane... latwiej dodac normalne logowanie)
-        public override Task OnConnectedAsync() => base.OnConnectedAsync();
+        public override async Task OnConnectedAsync()
+        {
+            await base.OnConnectedAsync().ConfigureAwait(false);
 
-        public override Task OnDisconnectedAsync(Exception? exception) => base.OnDisconnectedAsync(exception);
+            //if (_cache.TryGetValue(CacheKeys.ChatRoomsListKey, out IEnumerable<string> chatRooms))
+            //{
+            //    await Clients.Caller.SendAsync("ChannelsList", chatRooms).ConfigureAwait(false);
+            //}
+        }
 
-        private static string GetGroupCacheListName(string groupName)
-            => _cacheListName + ":" + groupName;
+        private static string GetMessageListKey(string chatRoomName)
+            => CacheKeys.ChatRoomMessagesListPrefix + chatRoomName;
     }
 }
