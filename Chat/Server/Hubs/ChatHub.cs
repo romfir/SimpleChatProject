@@ -25,7 +25,6 @@ namespace Chat.Server.Hubs
         public async Task RemoveFromGroup(string chatRoomName)
             => await Groups.RemoveFromGroupAsync(Context.ConnectionId, chatRoomName).ConfigureAwait(false);
 
-        //todo get na liste chatroomów?
         public async Task SendMessage(Message message, string chatRoomName)
         {
             Preconditions.CheckNotNull(message, nameof(message));
@@ -102,7 +101,6 @@ namespace Chat.Server.Hubs
             writer.Complete();
         }
 
-        //todo liczba userow gdzies wyswietlona? (lista? do listy trzeba by miec username i handlowac jego zmiane... latwiej dodac normalne logowanie)
         public override async Task OnConnectedAsync()
         {
             await base.OnConnectedAsync().ConfigureAwait(false);
