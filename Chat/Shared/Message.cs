@@ -17,7 +17,7 @@ namespace Chat.Shared
 
         public Guid Id { get; set; }
 
-        [Required, MaxLength(50)]
+        [Required, MaxLength(50), MinLength(1)]
         public string User { get; set; } = null!;
 
         [Required, MaxLength(200), MinLength(1)]
