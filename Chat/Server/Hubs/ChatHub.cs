@@ -107,10 +107,12 @@ namespace Chat.Server.Hubs
         {
             await base.OnConnectedAsync().ConfigureAwait(false);
 
-            //if (_cache.TryGetValue(CacheKeys.ChatRoomsListKey, out IEnumerable<string> chatRooms))
-            //{
-            //    await Clients.Caller.SendAsync("ChannelsList", chatRooms).ConfigureAwait(false);
-            //}
+            if (!_cache.TryGetValue(CacheKeys.ChatRoomsListKey, out IEnumerable<string> chatRooms))
+            {
+                chatRooms = "Global".Yield();
+            }
+
+            await Clients.Caller.SendAsync("ChannelsList", chatRooms).ConfigureAwait(false);
         }
 
         private static string GetMessageListKey(string chatRoomName)

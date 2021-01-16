@@ -112,9 +112,16 @@
                 <ValidationMessage For="@(() => _newRoomModel.NewChatRoomName)" />
 
             </label>
+
             <button class="roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block" tabindex="6">
                 Change
             </button>
+            <select class="form-control selectpicker" @bind="_newRoomModel.NewChatRoomName" style="display: inline-block; width:200px;">
+                @foreach (string room in _rooms)
+                {
+                    <option value="@room">@room</option>
+                }
+            </select>
         </EditForm>
     </footer>
 </div>
@@ -127,6 +134,8 @@
 
     // ConcurrentDictionary?
     private Dictionary<Guid, Message> _messages = new();
+
+    private HashSet<string> _rooms = new();
 
     private IOrderedEnumerable<Message> SortedMessages =>
         _messages.Select(x => x.Value).OrderBy(m => m.TimeStamp);
@@ -179,6 +188,12 @@
             {
                 ReceiveWritingNotification(userName);
             }
+        });
+
+        _hubConnection.On<List<string>>("ChannelsList", (rooms) =>
+        {
+            _rooms = rooms.ToHashSet();
+            StateHasChanged();
         });
 
         await StartAndRequestMessagesAsync();
@@ -270,12 +285,12 @@
     {
         _newRoomModel.NewChatRoomName = _newRoomModel.NewChatRoomName.Trim();
 
-
-
         if (ChatRoomName == _newRoomModel.NewChatRoomName)
         {
             return;
         }
+
+        _rooms.Add(_newRoomModel.NewChatRoomName);
 
         NavigationManager.NavigateTo($"/{_newRoomModel.NewChatRoomName}");
 
