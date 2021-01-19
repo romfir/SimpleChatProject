@@ -5,11 +5,13 @@
 @using System.Threading
 @using Chat.Client.Shared.Models
 @using System.Text.RegularExpressions
+@using Blazored.LocalStorage
+
+@inject ILocalStorageService localStorage
 @inject NavigationManager NavigationManager
 @implements IAsyncDisposable
 @* todo go to top/bottom jak sie wgl da samym c#? *@
 @* todo trzymanie username w localstorage? *@
-@* todo zmiana url? NIE refresh, ale czy da sie jakos zmienic sam url, zeby przy refreshu zostal na tym samym chatroomie? Byloby super *@
 <nav class="navbar navbar-expand-lg navbar-light fix fixed-top " style="position: sticky">
     <div style="margin:0 auto;" class="roundBorder gradientDark">
         <h2 class="ml-md-auto" style="color:white; padding-left:1em; padding-right:1em">Chat room: @ChatRoomNameParsed</h2>
@@ -113,9 +115,16 @@
                 <ValidationMessage For="@(() => _newRoomModel.NewChatRoomName)" />
 
             </label>
+
             <button class="roundBorder small-margin" disabled="@(!IsConnected)" type="submit" style="display: inline-block" tabindex="6">
                 Change
             </button>
+            <select class="form-control selectpicker" @bind="_newRoomModel.NewChatRoomName" style="display: inline-block; width:200px;">
+                @foreach (string room in _rooms)
+                {
+                    <option value="@room">@room</option>
+                }
+            </select>
         </EditForm>
     </footer>
 </div>
@@ -129,10 +138,14 @@
     // ConcurrentDictionary?
     private Dictionary<Guid, Message> _messages = new();
 
+    private HashSet<string> _rooms = new();
+
     private IOrderedEnumerable<Message> SortedMessages =>
         _messages.Select(x => x.Value).OrderBy(m => m.TimeStamp);
 
     private Message _currentMessage = new();
+
+    private const string _userNameLocalStorageKey = "User";
 
     private CancellationTokenSource _cancellationTokenSource = new();
 
@@ -157,8 +170,15 @@
         ChatRoomName = ChatRoomName ?? "Global";
 
         _hubConnection = new HubConnectionBuilder()
-                                            .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
-                                            .Build();
+                                        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+                                        .Build();
+
+        string userNameFromLocalStorage = await localStorage.GetItemAsync<string>(_userNameLocalStorageKey);
+
+        if (userNameFromLocalStorage is object)
+        {
+            _currentMessage.User = userNameFromLocalStorage;
+        }
 
         _hubConnection.On<Message>("ReceiveMessage", (message) =>
         {
@@ -180,6 +200,12 @@
             {
                 ReceiveWritingNotification(userName);
             }
+        });
+
+        _hubConnection.On<List<string>>("ChannelsList", (rooms) =>
+        {
+            _rooms = rooms.ToHashSet();
+            StateHasChanged();
         });
 
         await StartAndRequestMessagesAsync();
@@ -218,6 +244,13 @@
         await _hubConnection.SendAsync("SendMessage", _currentMessage, ChatRoomName, _cancellationTokenSource.Token);
 
         _currentMessage.Text = "";
+
+        string userNameInLocalStorage = await localStorage.GetItemAsync<string>(_userNameLocalStorageKey);
+
+        if (_currentMessage.User != userNameInLocalStorage)
+        {
+            await localStorage.SetItemAsync(_userNameLocalStorageKey, _currentMessage.User);
+        }
     }
 
     private Task DeleteMessage(Guid messageId)
@@ -271,12 +304,12 @@
     {
         _newRoomModel.NewChatRoomName = _newRoomModel.NewChatRoomName.Trim();
 
-
-
         if (ChatRoomName == _newRoomModel.NewChatRoomName)
         {
             return;
         }
+
+        _rooms.Add(_newRoomModel.NewChatRoomName);
 
         NavigationManager.NavigateTo($"/{_newRoomModel.NewChatRoomName}");
 

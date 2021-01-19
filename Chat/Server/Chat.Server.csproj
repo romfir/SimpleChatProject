@@ -6,11 +6,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="5.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="5.0.2" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Tools\Tools.csproj" />
     <ProjectReference Include="..\Client\Chat.Client.csproj" />
     <ProjectReference Include="..\Shared\Chat.Shared.csproj" />
   </ItemGroup>

@@ -1,3 +1,4 @@
+using Blazored.LocalStorage;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -15,6 +16,9 @@ namespace Chat.Client
 
             builder.Services.AddScoped(_ =>
                 new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
+
+            builder.Services.AddBlazoredLocalStorage(config =>
+                    config.JsonSerializerOptions.WriteIndented = true);
 
             await builder.Build().RunAsync().ConfigureAwait(false);
         }
