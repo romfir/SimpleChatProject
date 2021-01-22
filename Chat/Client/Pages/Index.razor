@@ -122,7 +122,15 @@
             <select class="form-control selectpicker" @bind="_newRoomModel.NewChatRoomName" style="display: inline-block; width:200px;">
                 @foreach (string room in _rooms)
                 {
-                    <option value="@room">@room</option>
+                    if (ChatRoomName == room)
+                    {
+                        <option value="@room" selected="selected">@room</option>
+                    }
+                    else
+                    {
+                        <option value="@room">@room</option>
+                    }
+
                 }
             </select>
         </EditForm>
