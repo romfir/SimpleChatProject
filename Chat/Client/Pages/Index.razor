@@ -187,7 +187,6 @@
         {
             _currentMessage.User = userNameFromLocalStorage;
         }
-        abc
         _hubConnection.On<Message>("ReceiveMessage", (message) =>
     {
         _messages.Add(message.Id, message);
